@@ -1,0 +1,10 @@
+<ul class="message-list collection">
+  <li class="collection-item message-item avatar" ng-repeat="message in messages track by message.uuid">
+
+    <user-avatar uuid="{{message.uuid}}"></user-avatar>
+	<span class="title">Anonymous robot #{{ message.uuid }}</span>
+	<p><i class="prefix mdi-action-alarm"></i> {{ message.date | date:"MM/dd/yyyy 'at' h:mma"}}</p>
+	<p>{{ message.content }}</p>
+
+  </li>
+</ul> 
