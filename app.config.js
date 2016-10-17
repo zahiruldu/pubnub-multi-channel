@@ -46,13 +46,13 @@
         return element.scrollTop() === 0 ;
       };
 
-      var fetchPreviousMessages = function(){
+      var fetchPreviousMessages = function(channelId){
 
         ngNotify.set('Loading previous messages...','success');
 
-        var currentMessage = MessageService.getMessages()[0].uuid
+        var currentMessage = MessageService.getMessages(channelId)[0].uuid
 
-        MessageService.fetchPreviousMessages().then(function(m){
+        MessageService.fetchPreviousMessages(channelId).then(function(m){
 
           // Scroll to the previous message 
           $anchorScroll(currentMessage);
@@ -60,6 +60,14 @@
         });
 
       };
+
+      var channelId = '';
+      scope.$on('getChannelBroadcast', function() {
+        channelId = MessageService.sharedService.channel;
+        init(channelId);
+        console.log('newchannel in list'+channelId);
+        
+      });
 
       var watchScroll = function() {
 
@@ -69,7 +77,7 @@
             ngNotify.set('All the messages have been loaded', 'grimace');
           }
           else {
-            fetchPreviousMessages();
+            fetchPreviousMessages(channelId);
           }
         }
 
@@ -78,7 +86,7 @@
 
       };
 
-      var init = function(){
+      var init = function(channelId){
           
           // Scroll down when the list is populated
           var unregister = $rootScope.$on('factory:message:populated', function(){ 
@@ -89,7 +97,7 @@
           });
 
           // Scroll down when new message
-          MessageService.subscribeNewMessage(function(){
+          MessageService.subscribeNewMessage(channelId,function(){
             if(scope.autoScrollDown){
               scrollToBottom()
             }
@@ -99,14 +107,22 @@
           element.bind("scroll", _.debounce(watchScroll,250));
       };
 
-      init();
+      // init(channelId);
 
     },
     controller: function($scope){
       // Auto scroll down is acticated when first loaded
       $scope.autoScrollDown = true;
+
+      var channelId = '';
+
+      $scope.$on('getChannelBroadcast', function() {
+        channelId = MessageService.sharedService.channel;
+        $scope.messages = MessageService.getMessages(channelId);
+        
+      });
       
-      $scope.messages = MessageService.getMessages();
+      // $scope.messages = MessageService.getMessages(this.channel);
     }
   };
 })
@@ -124,10 +140,29 @@
       $scope.uuid = currentUser;
       $scope.messageContent = '';
 
+       var channelId = 'messages-channel6';
+
+      $scope.$on('getChannelBroadcast', function() {
+        channelId = MessageService.sharedService.channel;
+        
+      });
+
       $scope.sendMessage = function(){
-        MessageService.sendMessage($scope.messageContent);
+        MessageService.sendMessage(channelId,$scope.messageContent);
         $scope.messageContent = '';
       }
+
+      $scope.changeChannel = function(channel){
+        MessageService.sharedService.configBroadcast(channel);
+
+      };
+    //   $scope.$on('getChannelBroadcast', function() {
+    //     self.channel = MessageService.sharedService.channel;
+    //     console.log('new chnanel'+self.channel);
+
+
+    // });
+
     }
   };
 })
