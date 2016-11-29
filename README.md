@@ -1,4 +1,4 @@
-# pubnub-multi-channel ANgular 1X
+# pubnub-multi-channel Angular 1X
 Pubnub chatting system with multiple channel.
 This package is designed for controling multiple channels from controller.
 You can switch to diferent channels very easily and the integration to your system is very easy. The message service has been refactored a lot.
