@@ -1,11 +1,30 @@
-angular.module('app')
-.factory('MessageService', ['$rootScope', '$q', 'Pubnub','currentUser', 'ngNotify',
+'use strict';
+
+angular
+  .module('app', [ 'pubnub.angular.service', 'ngNotify'])
+  .factory('MessageService', ['$rootScope', '$q', 'Pubnub','currentUser', 'ngNotify',
  function MessageServiceFactory($rootScope, $q, Pubnub, currentUser, ngNotify) {
   
   // Aliasing this by self so we can access to this trough self in the inner functions
   var self = this;
-  this.messages = []
-  this.channel = 'messages-channel6';
+  this.messages = [];
+  this.channel = '';
+
+// Channel Broadcasting starts
+  var sharedService = {};
+
+    sharedService.channel = '';
+
+    sharedService.configBroadcast = function(channel) {
+        this.channel = channel;
+        this.channelBroadcast();
+    };
+
+    sharedService.channelBroadcast = function() {
+        $rootScope.$broadcast('getChannelBroadcast');
+    };
+    // Channel broadcasting ends
+
 
   // We keep track of the timetoken of the first message of the array
   // so it will be easier to fetch the previous messages later
@@ -27,10 +46,10 @@ angular.module('app')
       });
   };
 
-  var init = function() {
+  var init = function(channelId) {
       
       Pubnub.subscribe({
-          channel: self.channel,
+          channel: channelId,
           disconnect : whenDisconnected, 
           reconnect : whenReconnected,
           triggerEvents: ['callback']
@@ -40,19 +59,19 @@ angular.module('app')
         self.firstMessageTimeToken = time;
       })
 
-      subcribeNewMessage(function(ngEvent,m){
+      subcribeNewMessage(channelId,function(ngEvent,m){
         self.messages.push(m)
         $rootScope.$digest()
   });
 
   };
 
-  var populate = function(){
+  var populate = function(channelId){
 
     var defaultMessagesNumber = 20;
 
     Pubnub.history({
-     channel: self.channel,
+     channel: channelId,
      callback: function(m){
         // Update the timetoken of the first message
         self.timeTokenFirstMessage = m[1]
@@ -74,19 +93,19 @@ angular.module('app')
 
   ////////////////// PUBLIC API ////////////////////////
 
-  var subcribeNewMessage = function(callback){
-    $rootScope.$on(Pubnub.getMessageEventNameFor(self.channel), callback);
+  var subcribeNewMessage = function(channelId,callback){
+    $rootScope.$on(Pubnub.getMessageEventNameFor(channelId), callback);
   };
 
 
-  var fetchPreviousMessages = function(){
+  var fetchPreviousMessages = function(channelId){
 
     var defaultMessagesNumber = 10;
 
     var deferred = $q.defer()
 
     Pubnub.history({
-     channel: self.channel,
+     channel: channelId,
      callback: function(m){
         // Update the timetoken of the first message
         self.timeTokenFirstMessage = m[1]
@@ -112,10 +131,10 @@ angular.module('app')
   };
 
 
-  var getMessages = function() {
+  var getMessages = function(channelId) {
 
     if (_.isEmpty(self.messages))
-      populate();
+      populate(channelId);
 
     return self.messages;
 
@@ -127,14 +146,14 @@ angular.module('app')
 
   };
 
-  var sendMessage = function(messageContent) {
+  var sendMessage = function(channelId,messageContent) {
 
       // Don't send an empty message 
       if (_.isEmpty(messageContent))
           return;
 
       Pubnub.publish({
-          channel: self.channel,
+          channel: channelId,
           message: {
               uuid: (Date.now() + currentUser),
               content: messageContent,
@@ -144,11 +163,21 @@ angular.module('app')
       });
   };
 
+  // Chaning channels  based on broadcast
+   $rootScope.$on('getChannelBroadcast', function() {
+        self.channel = sharedService.channel;
+        init(self.channel);
 
-  init();
+         self.messages = [];
+        console.log('new chnanel in service'+self.channel);
+
+
+    });
+  // init(self.channel);
 
   // The public API interface
   return {
+    sharedService:sharedService,
     getMessages: getMessages, 
     sendMessage: sendMessage,
     subscribeNewMessage: subcribeNewMessage,
