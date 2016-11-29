@@ -1,8 +1,8 @@
-# pubnub-multi-channel
-Pubnub chatting system with multiple channel
-This package is designed for controling multiple channels form controller.
-You can swithc to diference channel very easily. and aslo the integration to your system very easy. The message service has been refactored a lot.
-You you will enjoy this package to intertrate this with your system by pubnub. This package will help you to build a messaging system like facebook, Upwork message panel.
+# pubnub-multi-channel ANgular 1X
+Pubnub chatting system with multiple channel.
+This package is designed for controling multiple channels from controller.
+You can switch to diferent channels very easily and the integration to your system is very easy. The message service has been refactored a lot.
+You you will enjoy this package to intertrate Pubnub with your system. This package will help you to build a messaging system like facebook, Upwork messaging panel.
 
 # to run the code base
 
