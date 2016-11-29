@@ -1,188 +1,182 @@
-'use strict';
+  angular
+  .module('app')
+  .run(['Pubnub','currentUser', function(Pubnub, currentUser) {
 
-angular
-  .module('app', [ 'pubnub.angular.service', 'ngNotify'])
-  .factory('MessageService', ['$rootScope', '$q', 'Pubnub','currentUser', 'ngNotify',
- function MessageServiceFactory($rootScope, $q, Pubnub, currentUser, ngNotify) {
-  
-  // Aliasing this by self so we can access to this trough self in the inner functions
-  var self = this;
-  this.messages = [];
-  this.channel = '';
-
-// Channel Broadcasting starts
-  var sharedService = {};
-
-    sharedService.channel = '';
-
-    sharedService.configBroadcast = function(channel) {
-        this.channel = channel;
-        this.channelBroadcast();
-    };
-
-    sharedService.channelBroadcast = function() {
-        $rootScope.$broadcast('getChannelBroadcast');
-    };
-    // Channel broadcasting ends
-
-
-  // We keep track of the timetoken of the first message of the array
-  // so it will be easier to fetch the previous messages later
-  this.firstMessageTimeToken = null;
-  this.messagesAllFetched = false;
-
-  var whenDisconnected = function(){
-      ngNotify.set('Connection lost. Trying to reconnect...', {
-        type: 'warn',
-        sticky: true,
-        button: false,
-      });
-  };
-
-  var whenReconnected = function(){
-      ngNotify.set('Connection re-established.', {
-          type: 'info',
-          duration: 1500
-      });
-  };
-
-  var init = function(channelId) {
-      
-      Pubnub.subscribe({
-          channel: channelId,
-          disconnect : whenDisconnected, 
-          reconnect : whenReconnected,
-          triggerEvents: ['callback']
+    Pubnub.init({
+          publish_key: 'pub-c-830c2907-15e4-4920-957b-6abf3fde3384',
+          subscribe_key: 'sub-c-796e5a30-7d5a-11e6-a627-0619f8945a4f',
+          uuid: currentUser,
+          origin: 'pubsub.pubnub.com',
+          ssl: true
       });
 
-      Pubnub.time(function(time){
-        self.firstMessageTimeToken = time;
-      })
+  }])
+  .run(['ngNotify', function(ngNotify) {
 
-      subcribeNewMessage(channelId,function(ngEvent,m){
-        self.messages.push(m)
-        $rootScope.$digest()
-  });
-
-  };
-
-  var populate = function(channelId){
-
-    var defaultMessagesNumber = 20;
-
-    Pubnub.history({
-     channel: channelId,
-     callback: function(m){
-        // Update the timetoken of the first message
-        self.timeTokenFirstMessage = m[1]
-        angular.extend(self.messages, m[0]);  
-        
-        if(m[0].length < defaultMessagesNumber){
-          self.messagesAllFetched = true;
-        }
-
-        $rootScope.$digest()
-        $rootScope.$emit('factory:message:populated')
-        
-     },
-     count: defaultMessagesNumber, 
-     reverse: false
-    });
-
-  };
-
-  ////////////////// PUBLIC API ////////////////////////
-
-  var subcribeNewMessage = function(channelId,callback){
-    $rootScope.$on(Pubnub.getMessageEventNameFor(channelId), callback);
-  };
-
-
-  var fetchPreviousMessages = function(channelId){
-
-    var defaultMessagesNumber = 10;
-
-    var deferred = $q.defer()
-
-    Pubnub.history({
-     channel: channelId,
-     callback: function(m){
-        // Update the timetoken of the first message
-        self.timeTokenFirstMessage = m[1]
-        Array.prototype.unshift.apply(self.messages,m[0])
-        
-        if(m[0].length < defaultMessagesNumber){
-          self.messagesAllFetched = true;
-        }
-
-        $rootScope.$digest()
-        deferred.resolve(m)
-
-     },
-     error: function(m){
-        deferred.reject(m)
-     },
-     count: defaultMessagesNumber, 
-     start: self.timeTokenFirstMessage,
-     reverse: false
-    });
-
-    return deferred.promise
-  };
-
-
-  var getMessages = function(channelId) {
-
-    if (_.isEmpty(self.messages))
-      populate(channelId);
-
-    return self.messages;
-
-  };
-
-  var messagesAllFetched = function() {
-
-    return self.messagesAllFetched;
-
-  };
-
-  var sendMessage = function(channelId,messageContent) {
-
-      // Don't send an empty message 
-      if (_.isEmpty(messageContent))
-          return;
-
-      Pubnub.publish({
-          channel: channelId,
-          message: {
-              uuid: (Date.now() + currentUser),
-              content: messageContent,
-              sender_uuid: currentUser,
-              date: Date.now()
-          },
+      ngNotify.config({
+          theme: 'paster',
+          position: 'top',
+          duration: 250
       });
-  };
 
-  // Chaning channels  based on broadcast
-   $rootScope.$on('getChannelBroadcast', function() {
-        self.channel = sharedService.channel;
-        init(self.channel);
+  }])
 
-         self.messages = [];
-        console.log('new chnanel in service'+self.channel);
+  .value('currentUser', _.random(1000000).toString())
 
 
-    });
-  // init(self.channel);
-
-  // The public API interface
+  .directive('messageList', function($rootScope, $anchorScroll, MessageService, ngNotify) {
   return {
-    sharedService:sharedService,
-    getMessages: getMessages, 
-    sendMessage: sendMessage,
-    subscribeNewMessage: subcribeNewMessage,
-    fetchPreviousMessages: fetchPreviousMessages,
-    messagesAllFetched : messagesAllFetched
-  } 
+    restrict: "E",
+    replace: true,
+    templateUrl: 'components/message-list/message-list.html',
 
-}]);
+    link: function(scope, element, attrs, ctrl) {
+
+      var element = angular.element(element)
+
+      var scrollToBottom = function() {
+          element.scrollTop(element.prop('scrollHeight'));
+      };
+
+      var hasScrollReachedBottom = function(){
+        return element.scrollTop() + element.innerHeight() >= element.prop('scrollHeight')
+      };
+
+      var hasScrollReachedTop = function(){
+        return element.scrollTop() === 0 ;
+      };
+
+      var fetchPreviousMessages = function(channelId){
+
+        ngNotify.set('Loading previous messages...','success');
+
+        var currentMessage = MessageService.getMessages(channelId)[0].uuid
+
+        MessageService.fetchPreviousMessages(channelId).then(function(m){
+
+          // Scroll to the previous message 
+          $anchorScroll(currentMessage);
+
+        });
+
+      };
+
+      var channelId = '';
+      scope.$on('getChannelBroadcast', function() {
+        channelId = MessageService.sharedService.channel;
+        init(channelId);
+        console.log('newchannel in list'+channelId);
+        
+      });
+
+      var watchScroll = function() {
+
+        if(hasScrollReachedTop()){
+
+          if(MessageService.messagesAllFetched()){
+            ngNotify.set('All the messages have been loaded', 'grimace');
+          }
+          else {
+            fetchPreviousMessages(channelId);
+          }
+        }
+
+        // Update the autoScrollDown value 
+        scope.autoScrollDown = hasScrollReachedBottom()
+
+      };
+
+      var init = function(channelId){
+          
+          // Scroll down when the list is populated
+          var unregister = $rootScope.$on('factory:message:populated', function(){ 
+            // Defer the call of scrollToBottom is useful to ensure the DOM elements have been loaded
+            _.defer(scrollToBottom);
+            unregister();
+
+          });
+
+          // Scroll down when new message
+          MessageService.subscribeNewMessage(channelId,function(){
+            if(scope.autoScrollDown){
+              scrollToBottom()
+            }
+          });
+
+          // Watch the scroll and trigger actions
+          element.bind("scroll", _.debounce(watchScroll,250));
+      };
+
+      // init(channelId);
+
+    },
+    controller: function($scope){
+      // Auto scroll down is acticated when first loaded
+      $scope.autoScrollDown = true;
+
+      var channelId = '';
+
+      $scope.$on('getChannelBroadcast', function() {
+        channelId = MessageService.sharedService.channel;
+        $scope.messages = MessageService.getMessages(channelId);
+        
+      });
+      
+      // $scope.messages = MessageService.getMessages(this.channel);
+    }
+  };
+})
+
+
+.directive('messageForm', function() {
+  return {
+    restrict: "E",
+    replace: true,
+    templateUrl: 'components/message-form/message-form.html',
+    scope: {},
+    
+    controller: function($scope, currentUser, MessageService){
+
+      $scope.uuid = currentUser;
+      $scope.messageContent = '';
+
+       var channelId = 'messages-channel6';
+
+      $scope.$on('getChannelBroadcast', function() {
+        channelId = MessageService.sharedService.channel;
+        
+      });
+
+      $scope.sendMessage = function(){
+        MessageService.sendMessage(channelId,$scope.messageContent);
+        $scope.messageContent = '';
+      }
+
+      $scope.changeChannel = function(channel){
+        MessageService.sharedService.configBroadcast(channel);
+
+      };
+    //   $scope.$on('getChannelBroadcast', function() {
+    //     self.channel = MessageService.sharedService.channel;
+    //     console.log('new chnanel'+self.channel);
+
+
+    // });
+
+    }
+  };
+})
+
+.directive('userAvatar', function() {
+  return {
+    restrict: "E",
+    template: '<img src="{{avatarUrl}}" alt="{{uuid}}" class="circle">',
+    scope: {
+      uuid: "@",
+    },
+    controller: function($scope){
+      // Generating a uniq avatar for the given uniq string provided using robohash.org service
+      $scope.avatarUrl = '//robohash.org/' + $scope.uuid + '?set=set2&bgset=bg2&size=70x70';
+    }
+  };
+});
